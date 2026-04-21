@@ -10,3 +10,5 @@ edition = "2021"
 license = "MIT"
 authors = ["BountyChain"]
 
+[profile.release]
+overflow-checks = true
