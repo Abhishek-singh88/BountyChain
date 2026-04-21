@@ -2,8 +2,6 @@
 target/
 contracts/*/target/
 contracts/*/test_snapshots/
-/bounty_contract/
-/token_contract/
 
 # Frontend build and dependencies
 frontend/node_modules/
