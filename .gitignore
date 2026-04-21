@@ -1,0 +1,28 @@
+# Rust / Soroban build output
+target/
+contracts/*/target/
+contracts/*/test_snapshots/
+/bounty_contract/
+/token_contract/
+
+# Frontend build and dependencies
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Environment files
+.env
+.env.*
+frontend/.env
+frontend/.env.*
+contracts/.env
+contracts/.env.*
+
+# Editor / OS junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Codex local marker
+.codex

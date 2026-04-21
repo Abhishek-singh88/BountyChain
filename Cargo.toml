@@ -1,0 +1,12 @@
+[workspace]
+members = [
+    "contracts/token_contract",
+    "contracts/bounty_contract",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["BountyChain"]
+
