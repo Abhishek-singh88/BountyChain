@@ -241,7 +241,7 @@ impl BountyContract {
 #[cfg(test)]
 mod test {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Address, Env};
+    use soroban_sdk::{testutils::{Address as _, Events as _}, Address, Env, Event};
 
     fn setup() -> (Env, Address, Address, Address, Address) {
         let env = Env::default();
@@ -335,5 +335,51 @@ mod test {
 
         assert_eq!(token_client.balance_of(&creator), 880);
         assert_eq!(token_client.balance_of(&worker), 120);
+    }
+
+    #[test]
+    fn list_bounties_returns_all_bounties() {
+        let (env, _token_id, bounty_id, creator, worker) = setup();
+        let bounty_client = BountyContractClient::new(&env, &bounty_id);
+
+        let first = bounty_client.create_bounty(&creator, &100);
+        bounty_client.accept_bounty(&first, &worker);
+
+        let second = bounty_client.create_bounty(&creator, &50);
+
+        let list = bounty_client.list_bounties();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list.get(0).unwrap().id, first);
+        assert_eq!(list.get(1).unwrap().id, second);
+    }
+
+    #[test]
+    fn bounty_events_are_published() {
+        let (env, _token_id, bounty_id, creator, worker) = setup();
+        let bounty_client = BountyContractClient::new(&env, &bounty_id);
+
+        let bounty = bounty_client.create_bounty(&creator, &175);
+        assert_eq!(
+            env.events().all().filter_by_contract(&bounty_id),
+            std::vec![BountyCreated { id: bounty }.to_xdr(&env, &bounty_id)]
+        );
+
+        bounty_client.accept_bounty(&bounty, &worker);
+        assert_eq!(
+            env.events().all().filter_by_contract(&bounty_id),
+            std::vec![BountyAccepted { id: bounty }.to_xdr(&env, &bounty_id)]
+        );
+
+        bounty_client.submit_bounty(&bounty, &worker);
+        assert_eq!(
+            env.events().all().filter_by_contract(&bounty_id),
+            std::vec![BountyCompleted { id: bounty }.to_xdr(&env, &bounty_id)]
+        );
+
+        bounty_client.approve_bounty(&bounty, &creator);
+        assert_eq!(
+            env.events().all().filter_by_contract(&bounty_id),
+            std::vec![BountyPaid { id: bounty }.to_xdr(&env, &bounty_id)]
+        );
     }
 }
