@@ -1,9 +1,9 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Env, Symbol, Vec,
+    contract, contractevent, contractimpl, contracttype, symbol_short, token::TokenClient, Address,
+    Env, Symbol, Vec,
 };
-use token_contract::TokenInterfaceClient;
 
 #[cfg(test)]
 extern crate std;
@@ -59,8 +59,8 @@ fn status_accepted() -> Symbol {
     symbol_short!("ACCEPTED")
 }
 
-fn status_completed() -> Symbol {
-    symbol_short!("COMPLETED")
+fn status_submitted() -> Symbol {
+    symbol_short!("SUBMITTED")
 }
 
 fn status_paid() -> Symbol {
@@ -144,7 +144,7 @@ impl BountyContract {
         creator.require_auth();
 
         let token_contract = read_token_contract(env);
-        let token_client = TokenInterfaceClient::new(env, &token_contract);
+        let token_client = TokenClient::new(env, &token_contract);
         let contract_address = env.current_contract_address();
 
         token_client.transfer(&creator, &contract_address, &reward);
@@ -175,6 +175,9 @@ impl BountyContract {
 
         let mut bounty = read_bounty(env, id);
         ensure_status(&bounty, status_open(), "bounty is not open");
+        if bounty.creator == worker {
+            panic!("creator cannot accept own bounty");
+        }
 
         bounty.worker = Some(worker);
         bounty.status = status_accepted();
@@ -194,7 +197,7 @@ impl BountyContract {
             panic!("only the assigned worker can submit");
         }
 
-        bounty.status = status_completed();
+        bounty.status = status_submitted();
         write_bounty(env, &bounty);
 
         BountyCompleted { id }.publish(env);
@@ -208,11 +211,11 @@ impl BountyContract {
             panic!("only the creator can approve");
         }
 
-        ensure_status(&bounty, status_completed(), "bounty is not completed");
+        ensure_status(&bounty, status_submitted(), "bounty is not submitted");
         let worker = bounty.worker.clone().expect("worker not assigned");
 
         let token_contract = read_token_contract(env);
-        let token_client = TokenInterfaceClient::new(env, &token_contract);
+        let token_client = TokenClient::new(env, &token_contract);
         let contract_address = env.current_contract_address();
         token_client.transfer(&contract_address, &worker, &bounty.reward);
 
@@ -241,22 +244,26 @@ impl BountyContract {
 #[cfg(test)]
 mod test {
     use super::*;
-    use soroban_sdk::{testutils::{Address as _, Events as _}, Address, Env, Event};
+    use soroban_sdk::{
+        testutils::{Address as _, Events as _},
+        token::{StellarAssetClient, TokenClient},
+        Address, Env, Event,
+    };
 
     fn setup() -> (Env, Address, Address, Address, Address) {
         let env = Env::default();
         env.mock_all_auths();
         let admin = Address::generate(&env);
-        let token_id = env.register(token_contract::TokenContract, (admin.clone(),));
+        let token_id = env.register_stellar_asset_contract_v2(admin.clone()).address();
         let bounty_id = env.register(BountyContract, ());
         let bounty_client = BountyContractClient::new(&env, &bounty_id);
-        let token_client = TokenInterfaceClient::new(&env, &token_id);
+        let asset_client = StellarAssetClient::new(&env, &token_id);
         let creator = Address::generate(&env);
         let worker = Address::generate(&env);
 
         bounty_client.init(&token_id);
 
-        token_client.mint(&creator, &1_000);
+        asset_client.mint(&creator, &1_000);
 
         (env, token_id, bounty_id, creator, worker)
     }
@@ -264,14 +271,14 @@ mod test {
     #[test]
     fn create_bounty_locks_tokens() {
         let (env, token_id, bounty_id, creator, _worker) = setup();
-        let token_client = TokenInterfaceClient::new(&env, &token_id);
+        let token_client = TokenClient::new(&env, &token_id);
         let bounty_client = BountyContractClient::new(&env, &bounty_id);
 
         let bounty = bounty_client.create_bounty(&creator, &250);
 
         assert_eq!(bounty, 1);
-        assert_eq!(token_client.balance_of(&creator), 750);
-        assert_eq!(token_client.balance_of(&bounty_id), 250);
+        assert_eq!(token_client.balance(&creator), 750);
+        assert_eq!(token_client.balance(&bounty_id), 250);
 
         let stored = bounty_client.get_bounty(&bounty);
         assert_eq!(stored.status, status_open());
@@ -292,9 +299,20 @@ mod test {
     }
 
     #[test]
+    #[should_panic(expected = "creator cannot accept own bounty")]
+    fn creator_cannot_accept_own_bounty() {
+        let (env, _token_id, bounty_id, creator, _worker) = setup();
+        let bounty_client = BountyContractClient::new(&env, &bounty_id);
+
+        let bounty = bounty_client.create_bounty(&creator, &200);
+
+        bounty_client.accept_bounty(&bounty, &creator);
+    }
+
+    #[test]
     fn approve_bounty_pays_worker() {
         let (env, token_id, bounty_id, creator, worker) = setup();
-        let token_client = TokenInterfaceClient::new(&env, &token_id);
+        let token_client = TokenClient::new(&env, &token_id);
         let bounty_client = BountyContractClient::new(&env, &bounty_id);
 
         let bounty = bounty_client.create_bounty(&creator, &300);
@@ -305,10 +323,23 @@ mod test {
 
         bounty_client.approve_bounty(&bounty, &creator);
 
-        assert_eq!(token_client.balance_of(&worker), 300);
+        assert_eq!(token_client.balance(&worker), 300);
 
         let stored = bounty_client.get_bounty(&bounty);
         assert_eq!(stored.status, status_paid());
+    }
+
+    #[test]
+    fn submit_bounty_sets_submitted_status() {
+        let (env, _token_id, bounty_id, creator, worker) = setup();
+        let bounty_client = BountyContractClient::new(&env, &bounty_id);
+
+        let bounty = bounty_client.create_bounty(&creator, &150);
+        bounty_client.accept_bounty(&bounty, &worker);
+        bounty_client.submit_bounty(&bounty, &worker);
+
+        let stored = bounty_client.get_bounty(&bounty);
+        assert_eq!(stored.status, status_submitted());
     }
 
     #[test]
@@ -329,12 +360,12 @@ mod test {
     #[test]
     fn token_transfer_works() {
         let (env, token_id, _bounty_id, creator, worker) = setup();
-        let token_client = TokenInterfaceClient::new(&env, &token_id);
+        let token_client = TokenClient::new(&env, &token_id);
 
         token_client.transfer(&creator, &worker, &120);
 
-        assert_eq!(token_client.balance_of(&creator), 880);
-        assert_eq!(token_client.balance_of(&worker), 120);
+        assert_eq!(token_client.balance(&creator), 880);
+        assert_eq!(token_client.balance(&worker), 120);
     }
 
     #[test]
