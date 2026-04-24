@@ -8,9 +8,9 @@ import {
   nativeToScVal,
   scValToNative,
 } from "@stellar/stellar-sdk";
+import { Client } from "@stellar/stellar-sdk/contract";
 import { Server } from "@stellar/stellar-sdk/rpc";
 import {
-  addToken,
   getAddress,
   getNetworkDetails,
   isConnected,
@@ -20,16 +20,14 @@ import {
 
 export const DEFAULT_NETWORK_PASSPHRASE = Networks.TESTNET;
 export const DEFAULT_RPC_URL = "https://soroban-testnet.stellar.org";
-
-export const TOKEN_CONTRACT_ID =
-  process.env.NEXT_PUBLIC_TOKEN_CONTRACT_ID ??
-  "CBKIG4GDF32HPDT33JW5IVXLP474VOCGSSQFVD4GYTH4QA4UDD2U5NOK";
+export const NATIVE_ASSET_CONTRACT_ID =
+  "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 
 export const BOUNTY_CONTRACT_ID =
   process.env.NEXT_PUBLIC_BOUNTY_CONTRACT_ID ??
-  "CB2SSVQVWBEHPEMDERFIEBD654ARF3ADFMQGHPJRXZCII3VYJ6KKG3RE";
+  "CDYAO7KYUBMTCBZSSVT5ZHPFYNJ7GYTX4HTSD44CKCAYWW25BSPYGVVU";
 
-export type BountyStatus = "OPEN" | "ACCEPTED" | "COMPLETED" | "PAID";
+export type BountyStatus = "OPEN" | "ACCEPTED" | "SUBMITTED" | "PAID";
 
 export type BountyRecord = {
   id: number;
@@ -43,7 +41,7 @@ export type ChainSummary = {
   address: string;
   network: string;
   balance: string;
-  tokenBalance: string;
+  xlmBalance: string;
   bountyCount: number;
 };
 
@@ -120,30 +118,22 @@ async function buildInvocationTx({
     .build();
 }
 
-async function signAndSubmit(tx: any, sourceAddress: string) {
-  const server = createServer();
-  const prepared = await server.prepareTransaction(tx);
-  const signed = await signTransaction(prepared.toEnvelope().toXDR("base64"), {
+async function getBountyClient(sourceAddress: string) {
+  return Client.from({
+    contractId: BOUNTY_CONTRACT_ID,
+    rpcUrl: DEFAULT_RPC_URL,
     networkPassphrase: DEFAULT_NETWORK_PASSPHRASE,
-    address: sourceAddress,
+    publicKey: sourceAddress,
+    signTransaction,
   });
-
-  if (signed.error) {
-    throw new Error(signed.error);
-  }
-
-  const signedTx = TransactionBuilder.fromXDR(
-    signed.signedTxXdr,
-    DEFAULT_NETWORK_PASSPHRASE,
-  ) as any;
-
-  const response = await server.sendTransaction(signedTx);
-  if (response.status === "ERROR") {
-    throw new Error(String(response.errorResult ?? "Transaction failed"));
-  }
-
-  return response;
 }
+
+type BountyContractClient = {
+  create_bounty: (args: { creator: string; reward: bigint }) => Promise<any>;
+  accept_bounty: (args: { id: bigint; worker: string }) => Promise<any>;
+  submit_bounty: (args: { id: bigint; worker: string }) => Promise<any>;
+  approve_bounty: (args: { id: bigint; creator: string }) => Promise<any>;
+};
 
 async function simulateRead<T>({
   contractId,
@@ -203,28 +193,10 @@ export async function getWalletNetwork() {
   return details;
 }
 
-export async function addTokenToFreighterWallet() {
-  const connected = await isConnected();
-  if (!connected.isConnected) {
-    throw new Error("Connect Freighter first");
-  }
-
-  const result = await addToken({
-    contractId: TOKEN_CONTRACT_ID,
-    networkPassphrase: DEFAULT_NETWORK_PASSPHRASE,
-  });
-
-  if (result.error) {
-    throw new Error(result.error);
-  }
-
-  return result.contractId;
-}
-
 export async function readTokenBalance(address: string) {
   const value = await simulateRead<unknown>({
-    contractId: TOKEN_CONTRACT_ID,
-    functionName: "balance_of",
+    contractId: NATIVE_ASSET_CONTRACT_ID,
+    functionName: "balance",
     args: [toAddressValue(address)],
     sourceAddress: address,
   });
@@ -233,43 +205,29 @@ export async function readTokenBalance(address: string) {
 }
 
 export async function readBountyCount(address: string) {
-  const ids = await simulateRead<unknown[]>({
+  const bounties = await simulateRead<unknown[]>({
     contractId: BOUNTY_CONTRACT_ID,
     functionName: "list_bounties",
     args: [],
     sourceAddress: address,
   });
 
-  return Array.isArray(ids) ? ids.length : 0;
+  return Array.isArray(bounties) ? bounties.length : 0;
 }
 
 export async function readBounties(address: string) {
-  const ids = await simulateRead<unknown[]>({
+  const bounties = await simulateRead<unknown[]>({
     contractId: BOUNTY_CONTRACT_ID,
     functionName: "list_bounties",
     args: [],
     sourceAddress: address,
   });
 
-  if (!Array.isArray(ids) || ids.length === 0) {
+  if (!Array.isArray(bounties) || bounties.length === 0) {
     return [] as BountyRecord[];
   }
 
-  const bountyIds = ids.map((id) => Number(id));
-  const records = await Promise.all(
-    bountyIds.map(async (id) => {
-      const bounty = await simulateRead<unknown>({
-        contractId: BOUNTY_CONTRACT_ID,
-        functionName: "get_bounty",
-        args: [toU64Value(id)],
-        sourceAddress: address,
-      });
-
-      return normalizeBounty(bounty);
-    }),
-  );
-
-  return records;
+  return bounties.map(normalizeBounty);
 }
 
 export async function readBounty(address: string, bountyId: number) {
@@ -283,16 +241,27 @@ export async function readBounty(address: string, bountyId: number) {
   return normalizeBounty(bounty);
 }
 
+export async function readBountySafe(address: string, bountyId: number) {
+  try {
+    return await readBounty(address, bountyId);
+  } catch {
+    return null;
+  }
+}
+
 export async function createBounty(sourceAddress: string, reward: string | number) {
-  return signAndSubmit(
-    await buildInvocationTx({
-      contractId: BOUNTY_CONTRACT_ID,
-      functionName: "create_bounty",
-      args: [toAddressValue(sourceAddress), toI128Value(reward)],
-      sourceAddress,
-    }),
-    sourceAddress,
-  );
+  const client = (await getBountyClient(sourceAddress)) as unknown as BountyContractClient;
+  const tx = await client.create_bounty({
+    creator: sourceAddress,
+    reward: BigInt(reward),
+  });
+  const sent = await tx.signAndSend({ signTransaction, force: true });
+
+  return {
+    status: sent.sendTransactionResponse?.status ?? "PENDING",
+    hash: sent.sendTransactionResponse?.hash ?? "",
+    errorResultXdr: "",
+  };
 }
 
 export async function acceptBounty(
@@ -301,16 +270,18 @@ export async function acceptBounty(
   workerAddress?: string,
 ) {
   const worker = workerAddress ?? sourceAddress;
+  const client = (await getBountyClient(sourceAddress)) as unknown as BountyContractClient;
+  const tx = await client.accept_bounty({
+    id: BigInt(bountyId),
+    worker,
+  });
+  const sent = await tx.signAndSend({ signTransaction, force: true });
 
-  return signAndSubmit(
-    await buildInvocationTx({
-      contractId: BOUNTY_CONTRACT_ID,
-      functionName: "accept_bounty",
-      args: [toU64Value(bountyId), toAddressValue(worker)],
-      sourceAddress,
-    }),
-    sourceAddress,
-  );
+  return {
+    status: sent.sendTransactionResponse?.status ?? "PENDING",
+    hash: sent.sendTransactionResponse?.hash ?? "",
+    errorResultXdr: "",
+  };
 }
 
 export async function submitBounty(
@@ -319,16 +290,18 @@ export async function submitBounty(
   workerAddress?: string,
 ) {
   const worker = workerAddress ?? sourceAddress;
+  const client = (await getBountyClient(sourceAddress)) as unknown as BountyContractClient;
+  const tx = await client.submit_bounty({
+    id: BigInt(bountyId),
+    worker,
+  });
+  const sent = await tx.signAndSend({ signTransaction, force: true });
 
-  return signAndSubmit(
-    await buildInvocationTx({
-      contractId: BOUNTY_CONTRACT_ID,
-      functionName: "submit_bounty",
-      args: [toU64Value(bountyId), toAddressValue(worker)],
-      sourceAddress,
-    }),
-    sourceAddress,
-  );
+  return {
+    status: sent.sendTransactionResponse?.status ?? "PENDING",
+    hash: sent.sendTransactionResponse?.hash ?? "",
+    errorResultXdr: "",
+  };
 }
 
 export async function approveBounty(
@@ -337,30 +310,16 @@ export async function approveBounty(
   creatorAddress?: string,
 ) {
   const creator = creatorAddress ?? sourceAddress;
+  const client = (await getBountyClient(sourceAddress)) as unknown as BountyContractClient;
+  const tx = await client.approve_bounty({
+    id: BigInt(bountyId),
+    creator,
+  });
+  const sent = await tx.signAndSend({ signTransaction, force: true });
 
-  return signAndSubmit(
-    await buildInvocationTx({
-      contractId: BOUNTY_CONTRACT_ID,
-      functionName: "approve_bounty",
-      args: [toU64Value(bountyId), toAddressValue(creator)],
-      sourceAddress,
-    }),
-    sourceAddress,
-  );
-}
-
-export async function mintToken(
-  sourceAddress: string,
-  recipientAddress: string,
-  amount: string | number,
-) {
-  return signAndSubmit(
-    await buildInvocationTx({
-      contractId: TOKEN_CONTRACT_ID,
-      functionName: "mint",
-      args: [toAddressValue(recipientAddress), toI128Value(amount)],
-      sourceAddress,
-    }),
-    sourceAddress,
-  );
+  return {
+    status: sent.sendTransactionResponse?.status ?? "PENDING",
+    hash: sent.sendTransactionResponse?.hash ?? "",
+    errorResultXdr: "",
+  };
 }

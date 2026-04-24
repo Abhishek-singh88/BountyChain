@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "contracts/token_contract",
     "contracts/bounty_contract",
 ]
 resolver = "2"
