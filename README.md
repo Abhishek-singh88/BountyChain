@@ -175,22 +175,13 @@ NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 - The app is optimized for mobile and desktop.
 - Bounty data updates after each action.
 
-## Production Checklist
-
-- Public GitHub repository
-- Live demo link
-- Mobile responsive screenshot
-- CI/CD screenshot or badge
-- Contract address included above
-- Transaction hash to add from the final contract deployment
 
 ## Transaction Hash
 
-Add the final bounty contract deployment transaction hash here before submission:
 
-- `TODO: add Stellar testnet deployment transaction hash`
+- `9ee92205bca91e104856073007638bf4ec2ad24abce51fb45747033d9c4881b2 `
+- `ed56ec96d4466def0aa2ced9453201639361907c925120b7ca64c6f8307da66a `
+- ` 2fbc1a4dbc2b2fb31d39534823f7611bb236bc996658ecbf916fc19d19cbac1d`
 
-## Commit Count
 
-The repository includes more than 8 meaningful commits, satisfying the submission requirement.
 
