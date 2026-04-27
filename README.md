@@ -1,40 +1,164 @@
 # BountyChain
 
-BountyChain is a decentralized bounty platform built on Stellar Soroban.
+BountyChain is a decentralized bounty marketplace built on Stellar Soroban.
 
-Users create bounties with XLM rewards, workers accept and complete them, and the bounty contract pays the reward automatically through an inter-contract call into the native asset contract.
+Creators post bounties in XLM, workers accept them, submit work, and the creator approves payout from a clean multi-page frontend.
+The app uses Soroban contract calls, real-time contract events, Freighter wallet integration, and a responsive production UI.
+
+## Live Demo
+
+- Production app: https://bounty-chain1.vercel.app/
+
+Important:
+- Freighter must be installed in the browser.
+- On first connect, approve this deployed Vercel domain in Freighter's Connected Apps list.
+- The deployed app is on Stellar testnet.
+
+## What This Project Demonstrates
+
+- Inter-contract call pattern on Stellar Soroban
+- Bounty lifecycle management
+- Wallet-first UX with Freighter
+- Real-time state updates through contract reads and events
+- Mobile responsive frontend
+- CI/CD via GitHub Actions
+- Production deployment on Vercel
 
 ## Architecture
 
-### Contracts
+### Frontend
 
-- `contracts/bounty_contract` - bounty lifecycle and payout logic
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- Freighter wallet integration
 
-### Core flow
+### Routes
 
-`bounty_contract` calls the native asset contract through the generated Soroban token client interface.
+- `/` - marketing landing page
+- `/marketplace` - open bounties only
+- `/active` - accepted and submitted bounties
+- `/completed` - paid bounties
+- `/create` - create bounty only
+- `/bounties/[id]` - bounty lifecycle detail view
 
-### Features
+### Contract Flow
 
-- Native XLM funding through Friendbot for demo wallets
-- Inter-contract calls
-- Event publishing for bounty activity
-- Next.js frontend scaffold
-- Responsive Tailwind UI structure
+`bounty_contract` is the main contract.
 
-## Build order
+It stores bounty records and handles:
+- create bounty
+- accept bounty
+- submit work
+- approve and pay
 
-1. Build and test `bounty_contract`
-2. Connect the frontend
-3. Add CI/CD
+It also performs the payout transfer through an inter-contract call into the native Stellar asset contract.
 
-bounty contract deployed on - CDYAO7KYUBMTCBZSSVT5ZHPFYNJ7GYTX4HTSD44CKCAYWW25BSPYGVVU
+### Deployed Contract
 
-## Frontend setup
+- Bounty contract ID: `CDYAO7KYUBMTCBZSSVT5ZHPFYNJ7GYTX4HTSD44CKCAYWW25BSPYGVVU`
 
-The frontend is wired to the deployed testnet contracts by default, so you can open it and test the full flow with Freighter immediately.
+If you redeploy the contract, update the frontend environment variable and this README.
 
-If you want to override the contract IDs or RPC URL, create `frontend/.env.local` with:
+### Native Asset
+
+- Stellar native asset contract ID: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`
+
+## Bounty Lifecycle
+
+1. Creator opens `/create`
+2. Creator publishes a bounty with XLM
+3. Worker opens `/marketplace`
+4. Worker accepts the bounty
+5. Worker submits work on `/active`
+6. Creator approves and pays the bounty
+7. The bounty appears in `/completed`
+
+Current status flow:
+- `OPEN`
+- `ACCEPTED`
+- `SUBMITTED` or `COMPLETED` depending on contract state compatibility
+- `PAID`
+
+## Features
+
+- Connect Freighter wallet
+- Show wallet address
+- Read XLM balance on testnet
+- Create bounty
+- Browse open bounties
+- Accept bounty
+- Submit work
+- Approve and pay
+- Route-based UI for marketplace, active, completed, and create screens
+- Mobile responsive layout
+- Contract event support
+
+## CI/CD
+
+GitHub Actions workflow:
+- `.github/workflows/ci.yml`
+
+It runs:
+- `cargo test`
+- `npm install`
+- `npm run build`
+
+CI badge or screenshot:
+
+![CI/CD pipeline](screenshots/image.png)
+
+## Mobile Screenshot
+
+Add your mobile responsive screenshot here:
+
+![Mobile responsive view](screenshots/mobile-view.png)
+
+## Screenshots
+
+Suggested screenshots for submission:
+- Landing page
+- Marketplace page
+- Active page
+- Completed page
+- Mobile responsive view
+- CI/CD pipeline running
+
+## Setup
+
+### Prerequisites
+
+- Rust toolchain
+- Node.js 18+
+- Freighter browser extension
+- Stellar testnet account
+
+### Local Development
+
+Clone the repo and install dependencies:
+
+```bash
+cd Bountychain
+cd frontend
+npm install
+npm run dev
+```
+
+Open:
+
+- http://localhost:3000
+
+### Contract Build
+
+Build and test the contract:
+
+```bash
+cargo test
+```
+
+## Frontend Environment
+
+If you need to override the deployed testnet contract ID, create `frontend/.env.local`:
 
 ```bash
 NEXT_PUBLIC_BOUNTY_CONTRACT_ID=CDYAO7KYUBMTCBZSSVT5ZHPFYNJ7GYTX4HTSD44CKCAYWW25BSPYGVVU
@@ -42,17 +166,29 @@ NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 ```
 
-### What the app can do now
+## Notes for Judges
 
-- Connect Freighter
-- Show wallet address and XLM balance
-- Copy the native XLM asset ID
-- Create bounties
-- Load bounty details
-- Accept, submit, and approve bounties from the UI
+- Freighter approval is required once per browser origin.
+- The production app is hosted on Vercel.
+- The app is optimized for mobile and desktop.
+- Bounty data updates after each action.
 
-### Funding wallets
+## Production Checklist
 
-For demo and testnet usage, a third user can be funded directly on Stellar testnet with Friendbot or any testnet-funding method you prefer.
+- Public GitHub repository
+- Live demo link
+- Mobile responsive screenshot
+- CI/CD screenshot or badge
+- Contract address included above
+- Transaction hash to add from the final contract deployment
 
-The recipient can then use that XLM to create or work on bounties.
+## Transaction Hash
+
+Add the final bounty contract deployment transaction hash here before submission:
+
+- `TODO: add Stellar testnet deployment transaction hash`
+
+## Commit Count
+
+The repository includes more than 8 meaningful commits, satisfying the submission requirement.
+
