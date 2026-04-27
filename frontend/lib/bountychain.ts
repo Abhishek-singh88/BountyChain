@@ -172,6 +172,11 @@ export async function connectWallet() {
     if (account.error) {
       throw new Error(account.error);
     }
+    if (!account.address) {
+      throw new Error(
+        "Freighter is installed, but this Vercel domain is not connected yet. Open Freighter and approve this site in Connected Apps, then try again.",
+      );
+    }
 
     return account.address;
   }
@@ -179,6 +184,11 @@ export async function connectWallet() {
   const access = await requestAccess();
   if (access.error) {
     throw new Error(access.error);
+  }
+  if (!access.address) {
+    throw new Error(
+      "Freighter did not return an address. Please approve this Vercel domain in Freighter and reconnect.",
+    );
   }
 
   return access.address;
