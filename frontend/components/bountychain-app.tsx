@@ -44,7 +44,7 @@ function parsePositiveId(value: string | undefined) {
 function statusClass(status: string) {
   if (status === "OPEN") return "border-accent/30 bg-accent/10 text-accent";
   if (status === "ACCEPTED") return "border-amber-400/30 bg-amber-400/10 text-amber-200";
-  if (status === "SUBMITTED") return "border-sky-400/30 bg-sky-400/10 text-sky-200";
+  if (status === "SUBMITTED" || status === "COMPLETED") return "border-sky-400/30 bg-sky-400/10 text-sky-200";
   if (status === "PAID") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
   return "border-white/10 bg-white/5 text-muted";
 }
@@ -58,7 +58,7 @@ function canSubmitBounty(walletAddress: string, bounty: BountyRecord) {
 }
 
 function canApproveBounty(walletAddress: string, bounty: BountyRecord) {
-  return bounty.status === "SUBMITTED" && bounty.creator === walletAddress;
+  return (bounty.status === "SUBMITTED" || bounty.status === "COMPLETED") && bounty.creator === walletAddress;
 }
 
 function Card({
@@ -364,7 +364,7 @@ export default function BountyChainApp({ bountyId, focus = "home", view = "marke
 
   const openBounties = bounties.filter((bounty) => bounty.status === "OPEN");
   const activeBounties = bounties.filter(
-    (bounty) => bounty.status === "ACCEPTED" || bounty.status === "SUBMITTED",
+    (bounty) => bounty.status === "ACCEPTED" || bounty.status === "SUBMITTED" || bounty.status === "COMPLETED",
   );
   const completedBounties = bounties.filter((bounty) => bounty.status === "PAID");
   const isCreateFocus = focus === "create";
@@ -654,7 +654,7 @@ export default function BountyChainApp({ bountyId, focus = "home", view = "marke
                         >
                           {walletAddress && bounty.worker !== walletAddress ? "Worker only" : "Submit work"}
                         </button>
-                      ) : view === "active" && bounty.status === "SUBMITTED" ? (
+                      ) : view === "active" && (bounty.status === "SUBMITTED" || bounty.status === "COMPLETED") ? (
                         <button
                           onClick={() => handleApprove(bounty.id)}
                           disabled={busy || !walletAddress || !canApproveBounty(walletAddress, bounty)}
