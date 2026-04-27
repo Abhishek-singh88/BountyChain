@@ -7,6 +7,8 @@ The app uses Soroban contract calls, real-time contract events, Freighter wallet
 
 ## Live Demo
 
+- Demo Video Link: https://drive.google.com/file/d/1BiyhnWiyAZcVs-YguLPDD3WV7fCInzsz/view?usp=sharing
+
 - Production app: https://bounty-chain1.vercel.app/
 
 Important:
@@ -112,7 +114,7 @@ CI badge or screenshot:
 
 Add your mobile responsive screenshot here:
 
-![Mobile responsive view](screenshots/mobile-view.png)
+![Mobile responsive view](screenshots/mobile-view.jpg)
 
 ## Screenshots
 
